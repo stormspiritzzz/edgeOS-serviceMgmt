@@ -15,12 +15,17 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+func init() {
+	log.SetPrefix("TRACE: ")
+	log.SetFlags(log.Ldate | log.Ltime | log.Llongfile)
+}
+
 const (
 	port = ":50051"
 )
 
 // the map of AppUUID to ServUUID
-var appID2ServIDMap map[string]string /*创建集合 */
+var appID2ServIDMap map[string]string
 
 // type Empty struct{}
 
@@ -35,7 +40,7 @@ func main() {
 	}
 
 	appID2ServIDMap = make(map[string]string)
-	creatDir()
+	createYamlDir()
 
 	s := grpc.NewServer()
 	eservicemgmt.RegisterEdgeServiceMgmtServer(s, &server{})
@@ -47,65 +52,72 @@ func main() {
 }
 
 func (s *server) Deploy(ctx context.Context, req *eservicemgmt.DeployReq) (*eservicemgmt.DeployResp, error) {
-	// return nil, status.Errorf(codes.Unimplemented, "method Deploy not implemented")
 	var f *os.File
 	defer f.Close()
-	var err1 error
-	filename := "./yamls/" + req.GetServUUID() + ".yaml"
+	filename := "./yamls/" + req.GetServUUID() + ".yml"
 	exist, err := PathExists(filename)
 	if err != nil {
-		fmt.Printf("get dir error![%v]\n", err)
+		log.Printf("get dir error![%v]\n", err)
 		return &eservicemgmt.DeployResp{T: eservicemgmt.DeployResp_ERR,
-			ErrStr: "检测文件是否存在出错:" + fmt.Sprintf("%s", err)}, nil
+			ErrStr: "check file whether exist error:" + fmt.Sprintf("%s", err)}, nil
 	}
 
-	if exist { //如果文件存在
-		f, err1 = os.OpenFile(filename, os.O_CREATE, 0666) //打开文件
-		fmt.Println("文件存在")
+	if exist {
+		f, err = os.OpenFile(filename, os.O_CREATE, 0666) //open file
+		log.Println("file exist")
 	} else {
-		fmt.Println("文件不存在,创建文件")
-		f, err1 = os.Create(filename) //创建文件
+		log.Println("file not exist,create it")
+		f, err = os.Create(filename) // create file
 	}
 
 	if err != nil {
 		return &eservicemgmt.DeployResp{T: eservicemgmt.DeployResp_ERR,
-			ErrStr: "打开文件出错:" + fmt.Sprintf("%s", err)}, nil
+			ErrStr: "open file eeror:" + fmt.Sprintf("%s", err)}, nil
 	}
 
-	_, err1 = f.Write([]byte(req.GetMajorManifest()))
-	if err1 != nil {
-		log.Println(err1.Error())
+	_, err = f.Write([]byte(req.GetMajorManifest()))
+	if err != nil {
+		log.Println(err.Error())
 		return &eservicemgmt.DeployResp{T: eservicemgmt.DeployResp_ERR,
-			ErrStr: "写入文件出错:" + fmt.Sprintf("%s", err)}, nil
+			ErrStr: "write file error:" + fmt.Sprintf("%s", err)}, nil
 	}
 
-	cmd := fmt.Sprintf("docker-compose -f ./yamls/%s.yml up", req.GetServUUID())
-	out := string(Cmd(cmd, true))
-	fmt.Println(out)
+	// cmd := fmt.Sprintf("docker-compose -f ./yamls/%s.yml up", req.GetServUUID())
+	// out, err1 := Cmd(cmd, true)
+	// if err1 != nil {
+	// 	return &eservicemgmt.DeployResp{T: eservicemgmt.DeployResp_ERR,
+	// 		ErrStr: "cmd error:" + fmt.Sprintf("%s", err)}, nil
+	// }
+	// outStr := string(out)
+	// log.Println(outStr)
 
 	appID2ServIDMap[req.GetAppUUID()] = req.GetServUUID()
 
 	return &eservicemgmt.DeployResp{T: eservicemgmt.DeployResp_OK}, nil
 }
 func (s *server) Destroy(ctx context.Context, req *eservicemgmt.DestroyReq) (*eservicemgmt.Empty, error) {
-	cmd := fmt.Sprintf("docker-compose -f ./yamls/%s.yml down", req.GetServUUID())
-	out := string(Cmd(cmd, true))
-	fmt.Println(out)
+	// cmd := fmt.Sprintf("docker-compose -f ./yamls/%s.yml down", req.GetServUUID())
+	// out, err1 := Cmd(cmd, true)
+	// if err1 != nil {
+	// 	return &eservicemgmt.Empty{}, status.Errorf(codes.OK, fmt.Sprintf("error:%v", err1))
+	// }
+	// outStr := string(out)
+	// log.Println(outStr)
 
 	var f *os.File
 	defer f.Close()
 
-	filename := "./yamls/" + req.GetServUUID() + ".yaml"
+	filename := "./yamls/" + req.GetServUUID() + ".yml"
 	exist, err := PathExists(filename)
 	if err != nil {
-		fmt.Printf("get dir error![%v]\n", err)
+		log.Printf("get dir error![%v]\n", err)
 		return &eservicemgmt.Empty{}, status.Errorf(codes.OK, fmt.Sprintf("error:%v", err))
 	}
 
-	if exist { //如果文件存在
+	if exist {
 		err = os.Remove(filename)
 		if err != nil {
-			return &eservicemgmt.Empty{}, status.Errorf(codes.OK, fmt.Sprintf("error:%v", err))
+			return &eservicemgmt.Empty{}, err)
 		}
 	}
 
@@ -123,24 +135,18 @@ func (s *server) Discover(ctx context.Context, req *eservicemgmt.DiscoverReq) (*
 	var f *os.File
 	defer f.Close()
 
-	filename := "./yamls/" + appID2ServIDMap[req.GetAppUUID()] + ".yaml"
+	filename := "./yamls/" + appID2ServIDMap[req.GetAppUUID()] + ".yml"
 
 	content, err := readAllIntoMemory(filename)
 	if err != nil {
 		log.Fatal(err)
 		return &eservicemgmt.DiscoverResp{}, status.Errorf(codes.OK, fmt.Sprintf("error:%v", err))
 	}
-	fmt.Printf("%s\n", content)
+	log.Printf("%s\n", content)
 	return &eservicemgmt.DiscoverResp{Manifest: string(content)}, nil
 }
 
-// SayHello implements helloworld.GreeterServer
-// func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloReply, error) {
-// 	fmt.Println("######### get client request name :" + in.Name)
-// 	return &pb.HelloReply{Message: "Hello " + in.Name}, nil
-// }
-
-// test whether the dir or file exists
+// check whether the dir or file exists
 func PathExists(path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err == nil {
@@ -152,47 +158,49 @@ func PathExists(path string) (bool, error) {
 	return false, err
 }
 
-func creatDir() {
+// create the folder to contain the yamls
+func createYamlDir() {
 	_dir := "./yamls"
 	exist, err := PathExists(_dir)
 	if err != nil {
-		fmt.Printf("get dir error![%v]\n", err)
+		log.Printf("create yaml dir error![%v]\n", err)
 		return
 	}
 
 	if exist {
-		fmt.Printf("has dir![%v]\n", _dir)
+		log.Printf("has dir![%v]\n", _dir)
 	} else {
-		fmt.Printf("no dir![%v]\n", _dir)
-		// 创建文件夹
+		// create dir
 		err := os.Mkdir(_dir, os.ModePerm)
 		if err != nil {
-			fmt.Printf("mkdir failed![%v]\n", err)
+			log.Printf("mkdir failed![%v]\n", err)
 		} else {
-			fmt.Printf("mkdir success!\n")
+			log.Printf("mkdir success!\n")
 		}
 	}
 }
 
-func Cmd(cmd string, shell bool) []byte {
+func Cmd(cmd string, shell bool) ([]byte, error) {
 	if shell {
 		out, err := exec.Command("bash", "-c", cmd).Output()
 		if err != nil {
 			panic("some error found")
+			return out, err
 		}
-		return out
+		return out, nil
 	} else {
 		out, err := exec.Command(cmd).Output()
 		if err != nil {
 			panic("some error found")
+			return out, err
 		}
-		return out
+		return out, nil
 	}
 }
 
-// * 整个文件读到内存，适用于文件较小的情况
+// read the whole file into memory
 func readAllIntoMemory(filename string) (content []byte, err error) {
-	fp, err := os.Open(filename) // 获取文件指针
+	fp, err := os.Open(filename) // get the file pointer
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +211,7 @@ func readAllIntoMemory(filename string) (content []byte, err error) {
 		return nil, err
 	}
 	buffer := make([]byte, fileInfo.Size())
-	_, err = fp.Read(buffer) // 文件内容读取到buffer中
+	_, err = fp.Read(buffer) // put the content of the file into the buffer
 	if err != nil {
 		return nil, err
 	}

@@ -4,7 +4,6 @@ import (
 	eservicemgmt "edgeOS/edgeService"
 	"log"
 
-	uuid "github.com/satori/go.uuid"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -14,17 +13,22 @@ const (
 )
 
 func main() {
-	req := eservicemgmt.DeployReq{AppUUID: uuid.NewV4().String(),
-		ServUUID:      uuid.NewV4().String(),
+	// req := eservicemgmt.DeployReq{AppUUID: uuid.NewV4().String(),
+	// 	ServUUID:      uuid.NewV4().String(),
+	// 	MajorManifest: "testtest",
+	// 	MinorManifest: "testtest",
+	// }
+	req := eservicemgmt.DeployReq{AppUUID: "2b104870-b306-4e17-9741-b33af22e5991",
+		ServUUID:      "59f55ab8-2210-4914-a2d5-4f102e6ce140",
 		MajorManifest: "testtest",
 		MinorManifest: "testtest",
 	}
 	Deploy(&req)
 
-	// req := eservicemgmt.DestroyReq{ServUUID: uuid.NewV4().String()}
+	// req := eservicemgmt.DestroyReq{ServUUID: "59f55ab8-2210-4914-a2d5-4f102e6ce140"}
 	// Destroy(&req)
 
-	// req := eservicemgmt.DiscoverReq{AppUUID: uuid.NewV4().String()}
+	// req := eservicemgmt.DiscoverReq{AppUUID: "2b104870-b306-4e17-9741-b33af22e5991"}
 	// Discover(&req)
 
 }
@@ -40,9 +44,9 @@ func Deploy(req *eservicemgmt.DeployReq) {
 
 	r, err := c.Deploy(context.Background(), req)
 	if err != nil {
-		log.Fatalf("could not greet: %v", err)
+		log.Fatalf("deploy error: %v", err)
 	}
-	log.Printf("####### get server Greeting response: %s", r.ErrStr)
+	log.Printf("####### get server response: %s", r.ErrStr)
 }
 
 func Destroy(req *eservicemgmt.DestroyReq) {
@@ -56,9 +60,9 @@ func Destroy(req *eservicemgmt.DestroyReq) {
 
 	_, err1 := c.Destroy(context.Background(), req)
 	if err1 != nil {
-		log.Fatalf("could not greet: %v", err)
+		log.Fatalf("destroy error: %v", err)
 	}
-	log.Printf("####### get server Greeting response: %s", "")
+	log.Printf("####### get server response: %s", "")
 }
 
 func Discover(req *eservicemgmt.DiscoverReq) {
@@ -72,7 +76,7 @@ func Discover(req *eservicemgmt.DiscoverReq) {
 
 	r, err := c.Discover(context.Background(), req)
 	if err != nil {
-		log.Fatalf("could not greet: %v", err)
+		log.Fatalf("discover error: %v", err)
 	}
-	log.Printf("####### get server Greeting response: %s", r.String())
+	log.Printf("####### get server response: %s", r.String())
 }
