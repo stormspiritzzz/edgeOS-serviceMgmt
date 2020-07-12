@@ -2,11 +2,12 @@ package main
 
 import (
 	eservicemgmt "edgeOS/edgeService"
+	esutil "edgeOS/utils"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"os"
-	"os/exec"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -55,7 +56,7 @@ func (s *server) Deploy(ctx context.Context, req *eservicemgmt.DeployReq) (*eser
 	var f *os.File
 	defer f.Close()
 	filename := "./yamls/" + req.GetServUUID() + ".yml"
-	exist, err := PathExists(filename)
+	exist, err := esutil.PathExists(filename)
 	if err != nil {
 		log.Printf("get dir error![%v]\n", err)
 		return &eservicemgmt.DeployResp{T: eservicemgmt.DeployResp_ERR,
@@ -63,7 +64,7 @@ func (s *server) Deploy(ctx context.Context, req *eservicemgmt.DeployReq) (*eser
 	}
 
 	if exist {
-		f, err = os.OpenFile(filename, os.O_CREATE, 0666) //open file
+		f, err = os.OpenFile(filename, os.O_RDWR, 0666) //open file
 		log.Println("file exist")
 	} else {
 		log.Println("file not exist,create it")
@@ -75,40 +76,47 @@ func (s *server) Deploy(ctx context.Context, req *eservicemgmt.DeployReq) (*eser
 			ErrStr: "open file eeror:" + fmt.Sprintf("%s", err)}, nil
 	}
 
-	_, err = f.Write([]byte(req.GetMajorManifest()))
+	var dat map[string]interface{}
+	if err := json.Unmarshal([]byte(req.GetMajorManifest()), &dat); err != nil {
+		return &eservicemgmt.DeployResp{T: eservicemgmt.DeployResp_ERR,
+			ErrStr: "json parse eeror:" + fmt.Sprintf("%s", err)}, nil
+	}
+
+	yml := fmt.Sprintf("%s", dat["yml"])
+	_, err = f.Write([]byte(yml))
 	if err != nil {
 		log.Println(err.Error())
 		return &eservicemgmt.DeployResp{T: eservicemgmt.DeployResp_ERR,
 			ErrStr: "write file error:" + fmt.Sprintf("%s", err)}, nil
 	}
 
-	// cmd := fmt.Sprintf("docker-compose -f ./yamls/%s.yml up", req.GetServUUID())
-	// out, err1 := Cmd(cmd, true)
-	// if err1 != nil {
-	// 	return &eservicemgmt.DeployResp{T: eservicemgmt.DeployResp_ERR,
-	// 		ErrStr: "cmd error:" + fmt.Sprintf("%s", err)}, nil
-	// }
-	// outStr := string(out)
-	// log.Println(outStr)
+	cmd := fmt.Sprintf("docker-compose -f ./yamls/%s.yml up -d", req.GetServUUID())
+	out, err1 := esutil.Cmd(cmd, true)
+	if err1 != nil {
+		return &eservicemgmt.DeployResp{T: eservicemgmt.DeployResp_ERR,
+			ErrStr: "cmd error:" + fmt.Sprintf("%s", err)}, nil
+	}
+	outStr := string(out)
+	log.Println("cmd out:", outStr)
 
 	appID2ServIDMap[req.GetAppUUID()] = req.GetServUUID()
 
 	return &eservicemgmt.DeployResp{T: eservicemgmt.DeployResp_OK}, nil
 }
 func (s *server) Destroy(ctx context.Context, req *eservicemgmt.DestroyReq) (*eservicemgmt.Empty, error) {
-	// cmd := fmt.Sprintf("docker-compose -f ./yamls/%s.yml down", req.GetServUUID())
-	// out, err1 := Cmd(cmd, true)
-	// if err1 != nil {
-	// 	return &eservicemgmt.Empty{}, status.Errorf(codes.OK, fmt.Sprintf("error:%v", err1))
-	// }
-	// outStr := string(out)
-	// log.Println(outStr)
+	cmd := fmt.Sprintf("docker-compose -f ./yamls/%s.yml down", req.GetServUUID())
+	out, err1 := esutil.Cmd(cmd, true)
+	if err1 != nil {
+		return &eservicemgmt.Empty{}, status.Errorf(codes.OK, fmt.Sprintf("error:%v", err1))
+	}
+	outStr := string(out)
+	log.Println(outStr)
 
 	var f *os.File
 	defer f.Close()
 
 	filename := "./yamls/" + req.GetServUUID() + ".yml"
-	exist, err := PathExists(filename)
+	exist, err := esutil.PathExists(filename)
 	if err != nil {
 		log.Printf("get dir error![%v]\n", err)
 		return &eservicemgmt.Empty{}, status.Errorf(codes.OK, fmt.Sprintf("error:%v", err))
@@ -117,7 +125,7 @@ func (s *server) Destroy(ctx context.Context, req *eservicemgmt.DestroyReq) (*es
 	if exist {
 		err = os.Remove(filename)
 		if err != nil {
-			return &eservicemgmt.Empty{}, err)
+			return &eservicemgmt.Empty{}, err
 		}
 	}
 
@@ -132,36 +140,32 @@ func (s *server) Destroy(ctx context.Context, req *eservicemgmt.DestroyReq) (*es
 }
 
 func (s *server) Discover(ctx context.Context, req *eservicemgmt.DiscoverReq) (*eservicemgmt.DiscoverResp, error) {
-	var f *os.File
-	defer f.Close()
+	// var f *os.File
+	// defer f.Close()
 
-	filename := "./yamls/" + appID2ServIDMap[req.GetAppUUID()] + ".yml"
+	// filename := "./yamls/" + appID2ServIDMap[req.GetAppUUID()] + ".yml"
 
-	content, err := readAllIntoMemory(filename)
+	// content, err := esutil.ReadAllIntoMemory(filename)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// 	return &eservicemgmt.DiscoverResp{}, status.Errorf(codes.OK, fmt.Sprintf("error:%v", err))
+	// }
+	// log.Printf("%s\n", content)
+	hostIp, err := esutil.GetHostIp()
 	if err != nil {
-		log.Fatal(err)
 		return &eservicemgmt.DiscoverResp{}, status.Errorf(codes.OK, fmt.Sprintf("error:%v", err))
 	}
-	log.Printf("%s\n", content)
-	return &eservicemgmt.DiscoverResp{Manifest: string(content)}, nil
-}
 
-// check whether the dir or file exists
-func PathExists(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	return false, err
+	resMap := map[string]interface{}{"host": hostIp, "port": 8080}
+	res, _ := json.Marshal(resMap)
+
+	return &eservicemgmt.DiscoverResp{Manifest: string(res)}, nil
 }
 
 // create the folder to contain the yamls
 func createYamlDir() {
 	_dir := "./yamls"
-	exist, err := PathExists(_dir)
+	exist, err := esutil.PathExists(_dir)
 	if err != nil {
 		log.Printf("create yaml dir error![%v]\n", err)
 		return
@@ -178,42 +182,4 @@ func createYamlDir() {
 			log.Printf("mkdir success!\n")
 		}
 	}
-}
-
-func Cmd(cmd string, shell bool) ([]byte, error) {
-	if shell {
-		out, err := exec.Command("bash", "-c", cmd).Output()
-		if err != nil {
-			panic("some error found")
-			return out, err
-		}
-		return out, nil
-	} else {
-		out, err := exec.Command(cmd).Output()
-		if err != nil {
-			panic("some error found")
-			return out, err
-		}
-		return out, nil
-	}
-}
-
-// read the whole file into memory
-func readAllIntoMemory(filename string) (content []byte, err error) {
-	fp, err := os.Open(filename) // get the file pointer
-	if err != nil {
-		return nil, err
-	}
-	defer fp.Close()
-
-	fileInfo, err := fp.Stat()
-	if err != nil {
-		return nil, err
-	}
-	buffer := make([]byte, fileInfo.Size())
-	_, err = fp.Read(buffer) // put the content of the file into the buffer
-	if err != nil {
-		return nil, err
-	}
-	return buffer, nil
 }
